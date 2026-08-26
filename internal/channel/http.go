@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	reqTimeout = 5 * time.Second
-	maxRetries = 2
-	backoff    = time.Second
+	reqTimeout    = 5 * time.Second
+	maxRetries    = 2
+	backoff       = time.Second
+	maxRetryAfter = 30 * time.Second
 )
 
 type HTTPClient struct {
@@ -31,13 +32,16 @@ func retryable(code int) bool {
 	return code == 500 || code == 502 || code == 503 || code == 504 || code == 429
 }
 
-// retryDelay 计算下一次重试前的等待：优先遵循上游 Retry-After（秒数），
-// 否则按指数退避 1s、2s。
+// retryDelay 计算下一次重试前的等待：优先遵循上游 Retry-After（秒数，上限 30s），
+// 否则按指数退避 1s、2s。避免上游恶意/异常的长 Retry-After 耗尽 worker。
 func retryDelay(resp *http.Response, attempt int) time.Duration {
 	wait := backoff << attempt
 	if after := resp.Header.Get("Retry-After"); after != "" {
 		if secs, err := strconv.Atoi(after); err == nil && secs >= 0 {
 			wait = time.Duration(secs) * time.Second
+			if wait > maxRetryAfter {
+				wait = maxRetryAfter
+			}
 		}
 	}
 	return wait

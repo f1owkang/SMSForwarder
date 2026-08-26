@@ -1,0 +1,9 @@
+// 允许 smsforwarder 服务用户通过 ModemManager 发送与删除短信。
+// ModemManager 的 org.freedesktop.ModemManager1.Messaging 动作无 allow_any，
+// 系统用户无会话时 polkit 缺省按 auth_admin 拒绝，导致短信回落与 auto_delete 失效。
+polkit.addRule(function(action, subject) {
+    if (action.id === "org.freedesktop.ModemManager1.Messaging" &&
+        subject.user === "smsforwarder") {
+        return polkit.Result.YES;
+    }
+});

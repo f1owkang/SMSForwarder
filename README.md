@@ -38,8 +38,9 @@ ModemManager ──D-Bus Added信号──> 监听器 ──> 提取验证码/�
 ```
 
 - 启动时枚举所有调制解调器（不限定 Modem/0），订阅每个的 `Added` 信号
-- ModemManager 重启后自动重新订阅
+- ModemManager 重启后无需重新订阅，D-Bus 匹配规则持续有效，信号自动恢复
 - 每日输出一条心跳日志，证明进程与 D-Bus 连接健在
+- 短信洪泛时（如 ModemManager 重启后 SIM 卡积压短信重新上报）超过队列容量（64 条待处理 + 4 条处理中）的短信会被丢弃并记录告警，属有意的过载保护
 
 ## 安装
 
@@ -51,7 +52,7 @@ ModemManager ──D-Bus Added信号──> 监听器 ──> 提取验证码/�
 | `/etc/smsforwarder/` | config.yml 与词库 |
 | `/var/log/smsforwarder/` | 结构化日志 |
 
-服务以专用低权用户 `smsforwarder` 运行（安装脚本自动创建），不占用 root。
+服务以专用低权用户 `smsforwarder` 运行（安装脚本自动创建），不占用 root。安装脚本还会部署 polkit 规则（`/etc/polkit-1/rules.d/10-smsforwarder.rules`），授权该用户执行 ModemManager 的短信发送/删除动作；若你的发行版对 ModemManager 启用了自定义 polkit 覆盖规则，请以实测为准。
 
 装好之后三步：
 

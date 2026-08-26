@@ -31,7 +31,7 @@ build-all:
 
 package: build-all
 	@for arch in $(ARCHES); do \
-		cp config.example.yml stopwords.txt userwords.txt smsforwarder.service dist/smsforwarder-linux-$$arch/; \
+		cp config.example.yml stopwords.txt userwords.txt smsforwarder.service 10-smsforwarder.rules dist/smsforwarder-linux-$$arch/; \
 		tar czf dist/smsforwarder-$(VERSION)-linux-$$arch.tar.gz -C dist/smsforwarder-linux-$$arch .; \
 	done
 

@@ -4,6 +4,7 @@ set -e
 sudo systemctl stop smsforwarder 2>/dev/null || true
 sudo systemctl disable smsforwarder 2>/dev/null || true
 sudo rm -f /etc/systemd/system/smsforwarder.service
+sudo rm -f /etc/polkit-1/rules.d/10-smsforwarder.rules
 sudo systemctl daemon-reload
 sudo rm -f /usr/local/bin/smsforwarder
 

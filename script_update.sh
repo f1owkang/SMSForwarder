@@ -39,7 +39,7 @@ sudo cp "$TMP/stopwords.txt" "$TMP/userwords.txt" /etc/smsforwarder/
 sudo install -m 755 "$TMP/smsforwarder" /usr/local/bin/smsforwarder
 
 # 替换后用新二进制校验现有配置，失败自动回滚
-if ! sudo /usr/local/bin/smsforwarder -check >/dev/null 2>&1; then
+if ! sudo /usr/local/bin/smsforwarder -check -c /etc/smsforwarder/config.yml >/dev/null 2>&1; then
   echo "新版本配置自检失败，回滚到上一个版本"
   sudo install -m 755 /usr/local/bin/smsforwarder.bak /usr/local/bin/smsforwarder
   sudo systemctl restart smsforwarder
@@ -48,6 +48,9 @@ fi
 
 sudo id -u smsforwarder >/dev/null 2>&1 || sudo useradd --system --no-create-home --shell /usr/sbin/nologin smsforwarder
 sudo chown -R smsforwarder:smsforwarder /var/log/smsforwarder
+sudo mkdir -p /etc/polkit-1/rules.d
+sudo install -m 0644 "$TMP/10-smsforwarder.rules" /etc/polkit-1/rules.d/
+sudo systemctl restart polkit 2>/dev/null || sudo systemctl restart polkitd 2>/dev/null || true
 sudo systemctl restart smsforwarder
 
 echo "升级完成，原配置已保留（回滚备份：/usr/local/bin/smsforwarder.bak）。"

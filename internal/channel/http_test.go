@@ -176,6 +176,28 @@ func TestRetryAfterInvalidFallsBack(t *testing.T) {
 	}
 }
 
+func TestRetryAfterCappedAt30s(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) <= 2 {
+			w.Header().Set("Retry-After", "3600")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		io.WriteString(w, `{}`)
+	}))
+	defer srv.Close()
+	h, sleeps := newTestClient()
+	resp, err := h.PostJSONResp(context.Background(), srv.URL, nil, nil)
+	if err != nil {
+		t.Fatalf("第三次应成功: %v", err)
+	}
+	resp.Body.Close()
+	if len(*sleeps) != 2 || (*sleeps)[0] != 30*time.Second || (*sleeps)[1] != 30*time.Second {
+		t.Fatalf("Retry-After 应被截断到 30s: %v", *sleeps)
+	}
+}
+
 func TestRetryReplaysBodyIdentically(t *testing.T) {
 	var hits atomic.Int32
 	var mu sync.Mutex

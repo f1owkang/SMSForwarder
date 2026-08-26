@@ -31,8 +31,12 @@ sudo cp "$TMP/stopwords.txt" "$TMP/userwords.txt" /etc/smsforwarder/
 if [ ! -f /etc/smsforwarder/config.yml ]; then
   sudo cp "$TMP/config.example.yml" /etc/smsforwarder/config.yml
 fi
+sudo mkdir -p /etc/polkit-1/rules.d
+sudo install -m 0644 "$TMP/10-smsforwarder.rules" /etc/polkit-1/rules.d/
 sudo cp "$TMP/smsforwarder.service" /etc/systemd/system/
 sudo systemctl daemon-reload
+# 让 smsforwarder 用户的 polkit 授权生效
+sudo systemctl restart polkit 2>/dev/null || sudo systemctl restart polkitd 2>/dev/null || true
 
 if [ -f /home/forward/config.json ]; then
   echo "检测到旧版 Python 版配置 /home/forward/config.json，请参照新示例改写 /etc/smsforwarder/config.yml"

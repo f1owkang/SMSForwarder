@@ -16,8 +16,12 @@ sudo mkdir -p /etc/smsforwarder /var/log/smsforwarder
 sudo chown -R smsforwarder:smsforwarder /var/log/smsforwarder
 sudo cp stopwords.txt userwords.txt /etc/smsforwarder/
 [ -f /etc/smsforwarder/config.yml ] || sudo cp config.example.yml /etc/smsforwarder/config.yml
+sudo mkdir -p /etc/polkit-1/rules.d
+sudo install -m 0644 10-smsforwarder.rules /etc/polkit-1/rules.d/
 sudo cp smsforwarder.service /etc/systemd/system/
 sudo systemctl daemon-reload
+# 让 smsforwarder 用户的 polkit 授权生效
+sudo systemctl restart polkit 2>/dev/null || sudo systemctl restart polkitd 2>/dev/null || true
 
 echo "本地安装完成！请编辑 /etc/smsforwarder/config.yml 后："
 echo "  smsforwarder -check && sudo systemctl enable --now smsforwarder"
