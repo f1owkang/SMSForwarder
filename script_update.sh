@@ -1,34 +1,35 @@
 #!/bin/bash
+set -e
 
-# 设置安装路径
-INSTALL_DIR="/home/forward"
-TMP_DIR="/tmp/smsforwarder_update_tmp"
+REPO="f1owkang/SMSForwarder"
 
-# 检查目录是否存在
-if [ ! -d "$INSTALL_DIR" ]; then
-    echo "目录 $INSTALL_DIR 不存在，请先安装后再执行升级。"
-    exit 1
+case "$(uname -m)" in
+  x86_64)  ARCH=amd64 ;;
+  aarch64) ARCH=arm64 ;;
+  armv7*|armv6*) ARCH=arm ;;
+  *) echo "不支持的架构: $(uname -m)"; exit 1 ;;
+esac
+
+if [ ! -x /usr/local/bin/smsforwarder ]; then
+  echo "尚未安装，请先执行 script_install_online.sh"
+  exit 1
 fi
 
-# 清理临时目录
-rm -rf "$TMP_DIR"
-mkdir -p "$TMP_DIR"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
 
-# 下载最新代码压缩包
-echo "正在下载最新版本..."
-curl -L https://github.com/f1owkang/SMS_forwarder/archive/refs/heads/main.zip -o "$TMP_DIR/main.zip"
+TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+if [ -z "$TAG" ]; then
+  echo "无法获取最新版本号，请检查网络后重试"
+  exit 1
+fi
 
-# 解压
-unzip -q "$TMP_DIR/main.zip" -d "$TMP_DIR"
+echo "正在下载 ${ARCH} 最新版本（${TAG}）..."
+curl -fsSL "https://github.com/${REPO}/releases/download/${TAG}/smsforwarder-${TAG}-linux-${ARCH}.tar.gz" | tar xz -C "$TMP"
 
-# 删除配置文件，防止覆盖
-rm -f "$TMP_DIR/SMS_forwarder-main/config.json"
-# 拷贝文件覆盖旧文件
-cp -r "$TMP_DIR/SMS_forwarder-main/"* "$INSTALL_DIR/"
-# 清理临时文件
-rm -rf "$TMP_DIR"
+sudo cp /usr/local/bin/smsforwarder /usr/local/bin/smsforwarder.bak
+sudo cp "$TMP/stopwords.txt" "$TMP/userwords.txt" /etc/smsforwarder/
+sudo install -m 755 "$TMP/smsforwarder" /usr/local/bin/smsforwarder
+sudo systemctl restart smsforwarder
 
-# 启动服务
-systemctl restart smsforwarder
-
-echo "升级完成 ✅，原配置已保留。"
+echo "升级完成，原配置已保留（回滚备份：/usr/local/bin/smsforwarder.bak）。"

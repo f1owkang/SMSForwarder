@@ -1,0 +1,29 @@
+# 日志文件路径；留空则只写 stdout/journal
+log_file: /var/log/smsforwarder/sms_log.jsonl
+# 转发成功后删除设备上的短信
+auto_delete: false
+# 心跳日志间隔（证明服务存活），0 表示关闭
+heartbeat: 24h
+
+recipients:
+  - name: main1
+    channels:
+      # 按顺序尝试，成功即停；sms 渠道通常放最后作回落
+      - type: pushplus
+        token: "XXXXXXXXXXXXXXXXXXXXXXXXXX"
+      - type: sms
+        phone: "18100000000"
+  # 更多渠道示例（按需启用）
+  # - name: my_phone
+  #   channels:
+  #     - type: bark
+  #       server: https://api.day.app
+  #       device_key: "xxxxxxxx"
+  #     - type: serverchan
+  #       send_key: "SCTxxxxxxxx"
+  #     - type: telegram
+  #       bot_token: "123456:ABC-xxx"
+  #       chat_id: "10086"
+  #       proxy: ""
+  #     - type: webhook
+  #       url: https://example.com/hook

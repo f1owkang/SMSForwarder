@@ -1,11 +1,13 @@
 [Unit]
 Description=SMS Forwarder (using ModemManager)
-After=dbus.target
+After=dbus.service ModemManager.service
+Wants=ModemManager.service
 
 [Service]
 Type=simple
 Restart=on-failure
-ExecStart=/usr/bin/python3 /home/forward/smsforwarder.py
+RestartSec=3
+ExecStart=/usr/local/bin/smsforwarder -c /etc/smsforwarder/config.yml
 
 [Install]
 WantedBy=multi-user.target

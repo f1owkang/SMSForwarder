@@ -1,27 +1,41 @@
 #!/bin/bash
+set -e
 
-# 更新包列表
-sudo apt-get update
-# 安装依赖
-sudo apt-get install -y python3 python3-requests python3-gi python3-dbus python3-jieba
+REPO="f1owkang/SMSForwarder"
 
-# 创建目录 /home/forward/
-mkdir -p /home/forward/
-# 进入目录 /home/forward/
-cd /home/forward/
+case "$(uname -m)" in
+  x86_64)  ARCH=amd64 ;;
+  aarch64) ARCH=arm64 ;;
+  armv7*|armv6*) ARCH=arm ;;
+  *) echo "不支持的架构: $(uname -m)"; exit 1 ;;
+esac
 
-# 克隆 GitHub 仓库中的安装脚本和服务文件（下载压缩包）
-curl -L https://github.com/f1owkang/SMS_forwarder/archive/refs/heads/main.zip -o smsforwarder.zip
-# 解压 ZIP 文件
-unzip smsforwarder.zip
+URL_BASE="https://github.com/${REPO}/releases/download"
+TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+if [ -z "$TAG" ]; then
+  echo "无法获取最新版本号，请检查网络后重试"
+  exit 1
+fi
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
 
-# 删除 ZIP 文件
-rm smsforwarder.zip
-# 将解压的内容移到上一级目录并删除空目录
-mv SMS_forwarder-main/* .
-rmdir SMS_forwarder-main
+echo "正在下载 ${ARCH} 版本（${TAG}）..."
+curl -fsSL "${URL_BASE}/${TAG}/smsforwarder-${TAG}-linux-${ARCH}.tar.gz" | tar xz -C "$TMP"
 
-# 将服务文件复制到 systemd 服务目录
-cp /home/forward/smsforwarder.service /etc/systemd/system/
+sudo install -m 755 "$TMP/smsforwarder" /usr/local/bin/smsforwarder
+sudo mkdir -p /etc/smsforwarder /var/log/smsforwarder
+sudo cp "$TMP/stopwords.txt" "$TMP/userwords.txt" /etc/smsforwarder/
+if [ ! -f /etc/smsforwarder/config.yml ]; then
+  sudo cp "$TMP/config.example.yml" /etc/smsforwarder/config.yml
+fi
+sudo cp "$TMP/smsforwarder.service" /etc/systemd/system/
+sudo systemctl daemon-reload
 
-echo "安装 SMS 转发服务成功！请配置/home/forward/config.json然后启动服务。"
+if [ -f /home/forward/config.json ]; then
+  echo "检测到旧版 Python 版配置 /home/forward/config.json，请参照新示例改写 /etc/smsforwarder/config.yml"
+fi
+
+echo "安装完成！接下来："
+echo "  1. 编辑 /etc/smsforwarder/config.yml"
+echo "  2. 运行 smsforwarder -check 校验"
+echo "  3. sudo systemctl enable --now smsforwarder"
