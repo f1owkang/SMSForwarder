@@ -12,7 +12,7 @@ recipients:
       - type: pushplus
         token: "XXXXXXXXXXXXXXXXXXXXXXXXXX"
       - type: sms
-        phone: "181XXXXXXXX"
+        phone: "18100000000"
   # 更多渠道示例（按需启用）
   # - name: my_phone
   #   channels:
