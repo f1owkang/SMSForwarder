@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -105,6 +106,40 @@ func TestNetworkErrorRetriesThenFails(t *testing.T) {
 	h, _ := newTestClient()
 	if _, err := h.PostFormResp(context.Background(), url, nil); err == nil {
 		t.Fatal("网络错误最终应失败")
+	}
+}
+
+func TestRetryReplaysBodyIdentically(t *testing.T) {
+	var hits atomic.Int32
+	var mu sync.Mutex
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies = append(bodies, string(body))
+		mu.Unlock()
+		if hits.Add(1) <= 2 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		io.WriteString(w, `{}`)
+	}))
+	defer srv.Close()
+	h, _ := newTestClient()
+	resp, err := h.PostFormResp(context.Background(), srv.URL, url.Values{"a": {"1"}, "b": {"2"}})
+	if err != nil {
+		t.Fatalf("第三次应成功: %v", err)
+	}
+	resp.Body.Close()
+	mu.Lock()
+	defer mu.Unlock()
+	if hits.Load() != 3 || len(bodies) != 3 {
+		t.Fatalf("应尝试 3 次: hits=%d bodies=%d", hits.Load(), len(bodies))
+	}
+	for i, b := range bodies {
+		if b != "a=1&b=2" {
+			t.Errorf("第 %d 次请求体被改变: %q", i+1, b)
+		}
 	}
 }
 
