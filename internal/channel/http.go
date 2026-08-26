@@ -30,6 +30,17 @@ func retryable(code int) bool {
 	return code == 500 || code == 502 || code == 504
 }
 
+type bodyWithCancel struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *bodyWithCancel) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
+
 func (h *HTTPClient) do(ctx context.Context, req *http.Request) (*http.Response, error) {
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -38,17 +49,19 @@ func (h *HTTPClient) do(ctx context.Context, req *http.Request) (*http.Response,
 		}
 		rctx, cancel := context.WithTimeout(ctx, reqTimeout)
 		resp, err := h.Base.Do(req.WithContext(rctx))
-		cancel()
 		if err != nil {
+			cancel()
 			lastErr = err
 			continue
 		}
 		if retryable(resp.StatusCode) {
 			io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
+			cancel()
 			lastErr = fmt.Errorf("上游返回可重试状态码 %d", resp.StatusCode)
 			continue
 		}
+		resp.Body = &bodyWithCancel{ReadCloser: resp.Body, cancel: cancel}
 		return resp, nil
 	}
 	return nil, lastErr
