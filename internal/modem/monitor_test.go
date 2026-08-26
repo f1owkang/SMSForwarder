@@ -54,6 +54,9 @@ func TestAwaitReceivedGetterError(t *testing.T) {
 }
 
 func TestParseMMTimeVariants(t *testing.T) {
+	orig := time.Local
+	time.Local = time.FixedZone("CST", 8*3600)
+	defer func() { time.Local = orig }()
 	fake := time.Date(2026, 8, 26, 0, 0, 0, 0, time.Local)
 	cases := []struct{ in, want string }{
 		{"2026-01-02T03:04:05+08:00", "2026-01-02 03:04:05"},
