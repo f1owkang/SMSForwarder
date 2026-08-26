@@ -1,29 +1,17 @@
 #!/bin/bash
+set -e
 
-# 停止并禁用服务
-sudo systemctl stop smsforwarder
-sudo systemctl disable smsforwarder
-
-# 删除 systemd 服务文件
+sudo systemctl stop smsforwarder 2>/dev/null || true
+sudo systemctl disable smsforwarder 2>/dev/null || true
 sudo rm -f /etc/systemd/system/smsforwarder.service
-
-# 重新加载 systemd 配置
 sudo systemctl daemon-reload
+sudo rm -f /usr/local/bin/smsforwarder
 
-# 提示用户是否删除依赖包
-read -p "是否删除安装的依赖（python3, python3-requests, python3-gi, python3-dbus, python3-jieba）？(y/n): " choice
+read -p "是否同时删除配置与日志（/etc/smsforwarder /var/log/smsforwarder）？(y/n): " choice
 if [ "$choice" = "y" ]; then
-    # 删除已安装的依赖
-    sudo apt-get remove -y python3 python3-requests python3-gi python3-dbus python3-jieba
-
-    # 清理无用的依赖包
-    sudo apt-get autoremove -y
-
-    # 清理下载的缓存
-    sudo apt-get clean
-
-    echo "依赖包已删除！"
+  sudo rm -rf /etc/smsforwarder /var/log/smsforwarder
+  echo "配置与日志已删除！"
 else
-    echo "保留依赖包。"
+  echo "已保留 /etc/smsforwarder 与 /var/log/smsforwarder。"
 fi
-echo "卸载完成！请自行删除/home/forward/文件夹！！！"
+echo "卸载完成！"
