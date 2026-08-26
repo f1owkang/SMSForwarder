@@ -22,6 +22,12 @@ func TestVerificationCodeVariants(t *testing.T) {
 		{"验证码 884825523 多位数字不算", ""},
 		{"验证码12345678 新验证码9988", "验证码【9988】"},
 		{"随便聊天的普通短信内容", ""},
+		{"Your code is 123456, valid in 5 minutes", "验证码【123456】"},
+		{"code: 884825", "验证码【884825】"},
+		{"OTP 1234 please do not share", "验证码【1234】"},
+		{"verification code 90210", "验证码【90210】"},
+		{"postcode 123456", ""},
+		{"CODE 1234", "验证码【1234】"},
 	}
 	for _, c := range cases {
 		if got := matchCode(c.in); got != c.want {

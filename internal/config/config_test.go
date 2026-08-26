@@ -87,6 +87,7 @@ func TestChannelFieldErrors(t *testing.T) {
 	cases := []struct{ yml, wantSub string }{
 		{"recipients:\n  - name: a\n    channels:\n      - type: pushplus\n", "token"},
 		{"recipients:\n  - name: a\n    channels:\n      - type: bark\n        device_key: \"\"\n", "device_key"},
+		{"recipients:\n  - name: a\n    channels:\n      - type: bark\n        device_key: k\n        server: ftp://x\n", "server"},
 		{"recipients:\n  - name: a\n    channels:\n      - type: telegram\n        bot_token: t\n", "chat_id"},
 		{"recipients:\n  - name: a\n    channels:\n      - type: webhook\n        url: ftp://x\n", "url"},
 		{"recipients:\n  - name: a\n    channels:\n      - type: sms\n        phone: abc\n", "phone"},

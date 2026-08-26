@@ -9,7 +9,7 @@
 [![Release](https://img.shields.io/github/v/release/f1owkang/SMSForwarder?style=flat-square&label=Release&color=blue)](https://github.com/f1owkang/SMSForwarder/releases)
 [![Downloads](https://img.shields.io/github/downloads/f1owkang/SMSForwarder/total?style=flat-square&label=Downloads&color=green)](https://github.com/f1owkang/SMSForwarder/releases)
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
-[![Platform](https://img.shields.io/badge/platform-amd64%20%7C%20arm64%20%7C%20armv7-blueviolet?style=flat-square)](#安装)
+[![Platform](https://img.shields.io/badge/platform-amd64%20%7C%20arm64%20%7C%20armv7%20%7C%20armv6-blueviolet?style=flat-square)](#安装)
 [![License](https://img.shields.io/github/license/f1owkang/SMSForwarder?style=flat-square&color=orange)](LICENSE)
 
 [工作原理](#工作原理) ・ [安装](#安装) ・ [配置](#配置) ・ [推送渠道](#推送渠道) ・ [常见问题](#常见问题) ・ [从 Python 版迁移](#从-python-版迁移) ・ [本地构建](#本地构建)
@@ -43,7 +43,7 @@ ModemManager ──D-Bus Added信号──> 监听器 ──> 提取验证码/�
 
 ## 安装
 
-脚本自动识别架构（amd64 / arm64 / armv7），下载对应产物并安装：
+脚本自动识别架构（amd64 / arm64 / armv7 / armv6），下载对应产物并安装：
 
 | 路径 | 内容 |
 | :-- | :-- |
@@ -66,7 +66,7 @@ sudo /usr/local/bin/smsforwarder -test
 ```
 
 > [!WARNING]
-> `-test` 会真实发送，sms 渠道会产生短信资费。
+> `-test` 会真实推送：对每个接收者的每个渠道都会真发一条，sms 渠道会产生真实短信资费，请确认后再运行。
 
 ## 配置
 
@@ -111,7 +111,7 @@ recipients:
 
 | type | 必填字段 | 可选字段 | 说明 |
 | :-- | :-- | :-- | :-- |
-| pushplus | token | | 格式与旧版一致：标题为号码，正文首行为提取结果 |
+| pushplus | token | | 标题为关键词（无关键词则用号码），正文首行为提取结果 |
 | serverchan | send_key | | Server酱 |
 | bark | device_key | server | `server` 缺省为官方 `https://api.day.app` |
 | telegram | bot_token, chat_id | proxy | 标题为关键词，正文为「号码 / 正文 / 时间」三行 |
@@ -157,17 +157,25 @@ sudo ./script_uninstall.sh    # 停服务、删文件，可选清理配置
 <details>
 <summary><b>日志在哪？长什么样？</b></summary>
 
-两路输出：journal 里是人类可读的行；文件里是 JSONL，字段与旧 Python 版完全一致，已有的分析脚本不用改：
+两路输出：journal 里是人类可读的行；文件里是 JSONL，record 行的字段与旧 Python 版完全一致，已有的分析脚本不用改：
 
 ```json
-{"number":"10086","text":"……","timestamp":"2026-08-26 12:00:00","forwarded_to":["main1 (pushplus)"],"status":"ok"}
+{"type":"record","number":"10086","text":"……","timestamp":"2026-08-26 12:00:00","forwarded_to":["main1 (pushplus)"],"status":"ok"}
 ```
+
+每条 JSONL 都带 `type` 字段：`"log"` 为运行日志，`"record"` 为转发记录，下游脚本可据此分流；record 行的其余字段与旧 Python 版一致，已有分析脚本不受影响。
+</details>
+
+<details>
+<summary><b>偶尔收到重复推送？</b></summary>
+
+渠道请求失败时会退避重试（最多 3 次）。若上游已收到但响应超时或丢失，同一短信可能被推送两次——推送渠道基本没有幂等，这是重试机制的固有代价，无法完全消除。
 </details>
 
 <details>
 <summary><b>设备上有多个调制解调器怎么办？</b></summary>
 
-启动时会枚举全部 modem 并监听，不限定 Modem/0。短信回落渠道固定使用枚举到的第一个。
+启动时会枚举全部 modem 并监听，不限定 Modem/0。删除短信与短信回落都会基于收到短信的那张卡处理；自测消息无来源卡，回落到枚举到的第一台 modem。
 </details>
 
 ## 从 Python 版迁移

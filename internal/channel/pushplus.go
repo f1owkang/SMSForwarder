@@ -24,7 +24,7 @@ func (p *PushPlus) Name() string { return "pushplus" }
 func (p *PushPlus) Send(ctx context.Context, m Message) error {
 	form := url.Values{}
 	form.Set("token", p.Token)
-	form.Set("title", m.Number)
+	form.Set("title", Title(m))
 	form.Set("content", m.Keyword+"\n\n"+Body(m))
 	resp, err := p.HC.PostFormResp(ctx, p.Endpoint, form)
 	if err != nil {

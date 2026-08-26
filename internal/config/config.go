@@ -121,6 +121,9 @@ func validateChannel(ch ChannelConfig) error {
 		if ch.DeviceKey == "" {
 			return errors.New("device_key 不能为空")
 		}
+		if ch.Server != "" && !urlRe.MatchString(ch.Server) {
+			return fmt.Errorf("server 非法: %q", ch.Server)
+		}
 	case "telegram":
 		if ch.BotToken == "" || ch.ChatID == "" {
 			return errors.New("bot_token 与 chat_id 不能为空")

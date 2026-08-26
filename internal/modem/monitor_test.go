@@ -8,6 +8,59 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
+func TestDispatchAddedSubmitsJob(t *testing.T) {
+	mo := &Monitor{jobs: make(chan smsJob, 1)}
+	sig := &dbus.Signal{
+		Name: ifaceMessaging + ".Added",
+		Path: "/org/freedesktop/ModemManager1/Modem/0",
+		Body: []any{dbus.ObjectPath("/org/freedesktop/ModemManager1/SMS/3"), true},
+	}
+	done := make(chan struct{})
+	go func() {
+		mo.dispatch(sig)
+		close(done)
+	}()
+	select {
+	case j := <-mo.jobs:
+		if j.modemPath != "/org/freedesktop/ModemManager1/Modem/0" || j.smsPath != "/org/freedesktop/ModemManager1/SMS/3" {
+			t.Fatalf("job 应携带收信 modem 与短信 path: %+v", j)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Added 短信未投递到队列")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("dispatch 未返回")
+	}
+}
+
+func TestDispatchSkipsNotReceived(t *testing.T) {
+	mo := &Monitor{jobs: make(chan smsJob, 1)}
+	sig := &dbus.Signal{
+		Name: ifaceMessaging + ".Added",
+		Path: "/org/freedesktop/ModemManager1/Modem/0",
+		Body: []any{dbus.ObjectPath("/org/freedesktop/ModemManager1/SMS/3"), false},
+	}
+	mo.dispatch(sig)
+	select {
+	case j := <-mo.jobs:
+		t.Fatalf("本地新增/未接收的短信不应投递: %+v", j)
+	default:
+	}
+}
+
+func TestDispatchIgnoresOtherSignals(t *testing.T) {
+	mo := &Monitor{jobs: make(chan smsJob, 1)}
+	sig := &dbus.Signal{Name: "org.freedesktop.DBus.NameAcquired", Path: "/org/freedesktop/DBus"}
+	mo.dispatch(sig)
+	select {
+	case j := <-mo.jobs:
+		t.Fatalf("无关信号不应投递: %+v", j)
+	default:
+	}
+}
+
 func TestModemPathsFromObjects(t *testing.T) {
 	objs := map[dbus.ObjectPath]map[string]map[string]dbus.Variant{
 		"/org/freedesktop/ModemManager1/Modem/0": {"org.freedesktop.ModemManager1.Modem": {}},

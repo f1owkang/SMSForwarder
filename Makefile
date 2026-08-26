@@ -1,5 +1,5 @@
 VERSION ?= dev
-ARCHES  = amd64 arm64 arm
+ARCHES  = amd64 arm64 arm armv6
 LDFLAGS = -s -w -X main.version=$(VERSION)
 
 .DEFAULT_GOAL := test
@@ -18,7 +18,13 @@ test:
 build-all:
 	@for arch in $(ARCHES); do \
 		mkdir -p dist/smsforwarder-linux-$$arch; \
-		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch GOARM=7 \
+		case "$$arch" in \
+		  amd64) goarch=amd64; goarm=;; \
+		  arm64) goarch=arm64; goarm=;; \
+		  arm)   goarch=arm;   goarm=7;; \
+		  armv6) goarch=arm;   goarm=6;; \
+		esac; \
+		CGO_ENABLED=0 GOOS=linux GOARCH=$$goarch GOARM=$$goarm \
 		go build -trimpath -ldflags "$(LDFLAGS)" \
 		-o dist/smsforwarder-linux-$$arch/smsforwarder ./cmd/smsforwarder; \
 	done

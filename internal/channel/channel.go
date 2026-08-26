@@ -7,6 +7,7 @@ type Message struct {
 	Text      string
 	Keyword   string
 	Timestamp string
+	ModemPath string
 }
 
 type Channel interface {

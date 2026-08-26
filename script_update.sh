@@ -6,7 +6,8 @@ REPO="f1owkang/SMSForwarder"
 case "$(uname -m)" in
   x86_64)  ARCH=amd64 ;;
   aarch64) ARCH=arm64 ;;
-  armv7*|armv6*) ARCH=arm ;;
+  armv7*|armhf) ARCH=arm ;;
+  armv6*|armv5te) ARCH=armv6 ;;
   *) echo "不支持的架构: $(uname -m)"; exit 1 ;;
 esac
 

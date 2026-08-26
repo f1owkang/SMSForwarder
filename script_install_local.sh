@@ -2,7 +2,7 @@
 set -e
 
 BIN=""
-for cand in ./smsforwarder ./dist/smsforwarder-linux-arm64/smsforwarder ./dist/smsforwarder-linux-amd64/smsforwarder ./dist/smsforwarder-linux-arm/smsforwarder; do
+for cand in ./smsforwarder ./dist/smsforwarder-linux-arm64/smsforwarder ./dist/smsforwarder-linux-amd64/smsforwarder ./dist/smsforwarder-linux-arm/smsforwarder ./dist/smsforwarder-linux-armv6/smsforwarder; do
   if [ -f "$cand" ]; then BIN="$cand"; break; fi
 done
 if [ -z "$BIN" ]; then

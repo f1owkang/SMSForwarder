@@ -27,6 +27,7 @@ func TestInfoWritesBothSinks(t *testing.T) {
 		t.Fatalf("文件不是合法 JSONL: %v", err)
 	}
 	want := map[string]string{
+		"type":      "log",
 		"timestamp": "2026-08-26 12:34:56",
 		"level":     "INFO",
 		"message":   "短信监听服务已启动",
@@ -67,8 +68,8 @@ func TestRecordFlatFields(t *testing.T) {
 	if err := json.Unmarshal(f.Bytes(), &rec); err != nil {
 		t.Fatalf("Record 不是合法 JSONL: %v", err)
 	}
-	if rec["status"] != "ok" {
-		t.Fatalf("status 字段错误: %v", rec["status"])
+	if rec["status"] != "ok" || rec["type"] != "record" {
+		t.Fatalf("status/type 字段错误: %v", rec)
 	}
 	if con.String() != "[INFO] [√] 已转发\n" {
 		t.Fatalf("Record 控制台摘要错误: %q", con.String())

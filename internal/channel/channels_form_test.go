@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -21,10 +22,12 @@ func readBody(r *http.Request, n int) string {
 }
 
 func TestPushPlusRequestAndBizCode(t *testing.T) {
-	var gotPath, gotForm string
+	var gotPath string
+	var gotForm url.Values
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		gotForm = readBody(r, 1024)
+		body, _ := io.ReadAll(r.Body)
+		gotForm, _ = url.ParseQuery(string(body))
 		io.WriteString(w, `{"code":200,"msg":"ok"}`)
 	}))
 	defer srv.Close()
@@ -34,14 +37,37 @@ func TestPushPlusRequestAndBizCode(t *testing.T) {
 	if err := p.Send(context.Background(), testMsg()); err != nil {
 		t.Fatalf("发送失败: %v", err)
 	}
-	if !strings.HasSuffix(gotPath, "/send") ||
-		!strings.Contains(gotForm, "token=TOK") ||
-		!strings.Contains(gotForm, "title=10690001") ||
-		!strings.Contains(gotForm, "content=") {
-		t.Fatalf("请求不符: path=%q form=%q", gotPath, gotForm)
+	if !strings.HasSuffix(gotPath, "/send") {
+		t.Fatalf("路径不符: %q", gotPath)
 	}
-	if !strings.Contains(gotForm, "%E8%AE%A2%E5%8D%95") {
-		t.Fatalf("content 应含关键词: %q", gotForm)
+	if gotForm.Get("token") != "TOK" {
+		t.Fatalf("token 错误: %q", gotForm.Get("token"))
+	}
+	if gotForm.Get("title") != "订单、发货" {
+		t.Fatalf("标题应为关键词: %q", gotForm.Get("title"))
+	}
+	if !strings.Contains(gotForm.Get("content"), "订单") {
+		t.Fatalf("content 应含关键词: %q", gotForm.Get("content"))
+	}
+}
+
+func TestPushPlusTitleFallsBackToNumber(t *testing.T) {
+	var gotForm url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotForm, _ = url.ParseQuery(string(body))
+		io.WriteString(w, `{"code":200,"msg":"ok"}`)
+	}))
+	defer srv.Close()
+	p := NewPushPlus("TOK", NewHTTPClient())
+	p.Endpoint = srv.URL
+	m := testMsg()
+	m.Keyword = ""
+	if err := p.Send(context.Background(), m); err != nil {
+		t.Fatalf("发送失败: %v", err)
+	}
+	if gotForm.Get("title") != "10690001" {
+		t.Fatalf("无关键词时应回退号码: %q", gotForm.Get("title"))
 	}
 }
 

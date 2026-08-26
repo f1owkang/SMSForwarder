@@ -47,6 +47,11 @@ func main() {
 		fatalf("%v", err)
 	}
 	if *doCheck {
+		for _, name := range []string{"stopwords.txt", "userwords.txt"} {
+			if config.FindWordlist(path, name) == "" {
+				fmt.Printf("警告: 未找到词库文件 %s（运行时将降级使用内置词典）\n", name)
+			}
+		}
 		fmt.Printf("✓ 配置校验通过: %s（接收者 %d 个）\n", path, len(cfg.Recipients))
 		return
 	}
@@ -73,6 +78,7 @@ func main() {
 	}
 
 	if *doTest {
+		fmt.Fprintln(os.Stderr, "[警告] -test 会对每个接收者的每个渠道真实推送测试消息，sms 渠道将产生真实短信资费。")
 		os.Exit(app.RunSelfTest())
 	}
 
@@ -81,7 +87,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	mon := modem.NewMonitor(conn, app.HandleSMS, lg)
+	mon := modem.NewMonitor(conn, app.HandleSMS, lg, cfg.AutoDelete)
 	lg.Info("短信监听服务已启动")
 	if err := mon.Run(ctx); err != nil {
 		fatalf("%v", err)

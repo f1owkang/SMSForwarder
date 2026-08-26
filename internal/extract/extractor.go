@@ -12,7 +12,7 @@ import (
 	"github.com/go-ego/gse/hmm/extracker"
 )
 
-var codeRe = regexp.MustCompile(`(验证码|校验码|动态码)[^\d]{0,10}?(\d{4,6})`)
+var codeRe = regexp.MustCompile(`(?i)(验证码|校验码|动态码|动态密码|\b(?:verification code|code|otp)\b)[^\d]{0,10}?(\d{4,6})`)
 
 type Extractor struct {
 	seg       gse.Segmenter

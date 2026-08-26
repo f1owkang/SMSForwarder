@@ -32,7 +32,11 @@ func smsCreateProps(number, text string) map[string]dbus.Variant {
 }
 
 func (s *SMS) Send(ctx context.Context, m Message) error {
-	messaging := s.conn.Object(modemDest, s.modemPath)
+	modemPath := s.modemPath
+	if m.ModemPath != "" {
+		modemPath = dbus.ObjectPath(m.ModemPath)
+	}
+	messaging := s.conn.Object(modemDest, modemPath)
 	var smsPath dbus.ObjectPath
 	err := messaging.CallWithContext(ctx, ifaceMessaging+".Create", 0,
 		smsCreateProps(m.Number, m.Text)).Store(&smsPath)

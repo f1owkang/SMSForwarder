@@ -25,7 +25,7 @@ func (l *Logger) log(level, msg string) {
 	ts := l.now().Format("2006-01-02 15:04:05")
 	if l.file != nil {
 		if b, err := json.Marshal(map[string]string{
-			"timestamp": ts, "level": level, "message": msg,
+			"type": "log", "timestamp": ts, "level": level, "message": msg,
 		}); err == nil {
 			fmt.Fprintf(l.file, "%s\n", b)
 		}
@@ -41,7 +41,11 @@ func (l *Logger) Record(fields map[string]any, summary string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.file != nil {
-		if b, err := json.Marshal(fields); err == nil {
+		rec := map[string]any{"type": "record"}
+		for k, v := range fields {
+			rec[k] = v
+		}
+		if b, err := json.Marshal(rec); err == nil {
 			fmt.Fprintf(l.file, "%s\n", b)
 		}
 	}

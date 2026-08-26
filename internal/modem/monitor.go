@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -21,16 +22,25 @@ const (
 	stateReceived  = 3
 	pollBudget     = 5 * time.Second
 	pollTick       = 1 * time.Second
+	workerCount    = 4
+	jobQueue       = 64
 )
 
-type Monitor struct {
-	conn  *dbus.Conn
-	onSMS func(channel.Message) bool
-	log   *logging.Logger
+type smsJob struct {
+	modemPath dbus.ObjectPath
+	smsPath   dbus.ObjectPath
 }
 
-func NewMonitor(conn *dbus.Conn, onSMS func(channel.Message) bool, lg *logging.Logger) *Monitor {
-	return &Monitor{conn: conn, onSMS: onSMS, log: lg}
+type Monitor struct {
+	conn       *dbus.Conn
+	onSMS      func(channel.Message) bool
+	log        *logging.Logger
+	autoDelete bool
+	jobs       chan smsJob
+}
+
+func NewMonitor(conn *dbus.Conn, onSMS func(channel.Message) bool, lg *logging.Logger, autoDelete bool) *Monitor {
+	return &Monitor{conn: conn, onSMS: onSMS, log: lg, autoDelete: autoDelete}
 }
 
 func modemPathsFromObjects(objs map[dbus.ObjectPath]map[string]map[string]dbus.Variant) []dbus.ObjectPath {
@@ -89,10 +99,14 @@ func awaitReceived(get func() (uint32, error), budget, tick time.Duration, sleep
 	}
 }
 
+// subscribe 只在启动时调用一次。D-Bus 匹配规则属于本连接，ModemManager
+// 重启后仍然有效，因此重启时无需也不应重复 AddMatchSignal（重复订阅会导致
+// 每条信号被投递 N 次）。
 func (mo *Monitor) subscribe() error {
 	if err := mo.conn.AddMatchSignal(
 		dbus.WithMatchInterface(ifaceMessaging),
 		dbus.WithMatchMember("Added"),
+		dbus.WithMatchSender(dest),
 	); err != nil {
 		return fmt.Errorf("订阅短信信号失败: %w", err)
 	}
@@ -114,6 +128,22 @@ func (mo *Monitor) Run(ctx context.Context) error {
 	if err := mo.subscribe(); err != nil {
 		return err
 	}
+	jobs := make(chan smsJob, jobQueue)
+	mo.jobs = jobs
+	var wg sync.WaitGroup
+	wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				mo.handleIncoming(j.modemPath, j.smsPath)
+			}
+		}()
+	}
+	defer func() {
+		close(jobs)
+		wg.Wait()
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -125,11 +155,6 @@ func (mo *Monitor) Run(ctx context.Context) error {
 }
 
 func (mo *Monitor) dispatch(sig *dbus.Signal) {
-	defer func() {
-		if r := recover(); r != nil {
-			mo.log.Error(fmt.Sprintf("处理信号异常（已恢复）: %v", r))
-		}
-	}()
 	switch {
 	case sig.Name == ifaceMessaging+".Added":
 		path, ok := sig.Body[0].(dbus.ObjectPath)
@@ -137,16 +162,21 @@ func (mo *Monitor) dispatch(sig *dbus.Signal) {
 		if !ok || !ok2 || !received {
 			return
 		}
-		mo.handleIncoming(path)
+		mo.jobs <- smsJob{modemPath: sig.Path, smsPath: path}
 	case sig.Name == "org.freedesktop.DBus.NameOwnerChanged":
-		mo.log.Warn("ModemManager 发生变更，重新建立监听")
-		if err := mo.subscribe(); err != nil {
-			mo.log.Error(fmt.Sprintf("重建监听失败: %v", err))
+		mo.log.Warn("ModemManager 发生变更，重新枚举调制解调器")
+		if _, err := FirstModemPath(mo.conn); err != nil {
+			mo.log.Error(fmt.Sprintf("重新枚举调制解调器失败: %v", err))
 		}
 	}
 }
 
-func (mo *Monitor) handleIncoming(path dbus.ObjectPath) {
+func (mo *Monitor) handleIncoming(modemPath, path dbus.ObjectPath) {
+	defer func() {
+		if r := recover(); r != nil {
+			mo.log.Error(fmt.Sprintf("处理短信异常（已恢复）: %v", r))
+		}
+	}()
 	obj := mo.conn.Object(dest, path)
 	get := func() (uint32, error) {
 		var props map[string]dbus.Variant
@@ -183,9 +213,10 @@ func (mo *Monitor) handleIncoming(path dbus.ObjectPath) {
 		Number:    number,
 		Text:      text,
 		Timestamp: parseMMTime(time.Now(), variantString(props, "Timestamp", "")),
+		ModemPath: string(modemPath),
 	}
-	if mo.onSMS(msg) {
-		mo.delete(path)
+	if mo.autoDelete && mo.onSMS(msg) {
+		mo.delete(modemPath, path)
 	}
 }
 
@@ -196,12 +227,12 @@ func variantString(props map[string]dbus.Variant, key, def string) string {
 	return def
 }
 
-func (mo *Monitor) delete(path dbus.ObjectPath) {
-	err := mo.conn.Object(dest, path).CallWithContext(context.Background(),
-		ifaceMessaging+".Delete", 0, path).Err
+func (mo *Monitor) delete(modemPath, smsPath dbus.ObjectPath) {
+	err := mo.conn.Object(dest, modemPath).CallWithContext(context.Background(),
+		ifaceMessaging+".Delete", 0, smsPath).Err
 	if err != nil {
-		mo.log.Error(fmt.Sprintf("删除短信失败: %s - %v", path, err))
+		mo.log.Error(fmt.Sprintf("删除短信失败: %s - %v", smsPath, err))
 		return
 	}
-	mo.log.Info(fmt.Sprintf("已删除短信: %s", path))
+	mo.log.Info(fmt.Sprintf("已删除短信: %s", smsPath))
 }
