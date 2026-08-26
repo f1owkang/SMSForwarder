@@ -71,19 +71,41 @@ func buildOne(cc config.ChannelConfig, hc *channel.HTTPClient, conn *dbus.Conn, 
 	}
 }
 
+func sendGuarded(ch channel.Channel, m channel.Message) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic 已恢复: %v", r)
+		}
+	}()
+	return ch.Send(context.Background(), m)
+}
+
 func (a *App) HandleSMS(m channel.Message) (delivered bool) {
+	m.Keyword = a.keywordOf(m.Text)
+	sentTo := []string{}
 	defer func() {
 		if r := recover(); r != nil {
 			a.warn(fmt.Sprintf("[!] 处理短信异常（已恢复）: %v", r))
-			delivered = false
 		}
+		status := "failed"
+		summary := fmt.Sprintf("[!] 转发失败: %s", m.Number)
+		if len(sentTo) > 0 {
+			status = "ok"
+			summary = fmt.Sprintf("[√] 已转发: %s -> %v", m.Number, sentTo)
+		}
+		a.record(map[string]any{
+			"number":       m.Number,
+			"text":         m.Text,
+			"timestamp":    m.Timestamp,
+			"forwarded_to": sentTo,
+			"status":       status,
+		}, summary)
+		delivered = len(sentTo) > 0
 	}()
-	m.Keyword = a.keywordOf(m.Text)
-	var sentTo []string
 	for _, rc := range a.recipients {
 		ok := false
 		for _, ch := range rc.Chans {
-			if err := ch.Send(context.Background(), m); err != nil {
+			if err := sendGuarded(ch, m); err != nil {
 				a.warn(fmt.Sprintf("[!] %s 渠道 %s 失败: %v", rc.Name, ch.Name(), err))
 				continue
 			}
@@ -95,21 +117,7 @@ func (a *App) HandleSMS(m channel.Message) (delivered bool) {
 			a.warn(fmt.Sprintf("[!] 接收者 %s 所有渠道均失败", rc.Name))
 		}
 	}
-	fields := map[string]any{
-		"number":       m.Number,
-		"text":         m.Text,
-		"timestamp":    m.Timestamp,
-		"forwarded_to": sentTo,
-	}
-	status := "failed"
-	summary := fmt.Sprintf("[!] 转发失败: %s", m.Number)
-	if len(sentTo) > 0 {
-		status = "ok"
-		summary = fmt.Sprintf("[√] 已转发: %s -> %v", m.Number, sentTo)
-	}
-	fields["status"] = status
-	a.record(fields, summary)
-	return len(sentTo) > 0
+	return
 }
 
 func (a *App) RunSelfTest() int {

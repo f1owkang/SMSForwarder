@@ -72,6 +72,54 @@ func TestPanicIsolated(t *testing.T) {
 	}
 }
 
+func TestPanicDoesNotBlockLaterRecipients(t *testing.T) {
+	healthy := &fakeCh{name: "ok"}
+	app := &App{
+		recipients: []recipientRuntime{
+			{Name: "r1", Chans: []channel.Channel{panicCh{}}},
+			{Name: "r2", Chans: []channel.Channel{healthy}},
+		},
+		keywordOf: func(s string) string { return "关键词A" },
+		warn:      func(string) {},
+		info:      func(string) {},
+		record:    func(map[string]any, string) {},
+	}
+	if !app.HandleSMS(channel.Message{Number: "n", Text: "t"}) {
+		t.Fatal("r2 健康渠道应使整体视为已送达")
+	}
+	if healthy.calls != 1 {
+		t.Fatalf("r2 渠道应恰好被调用一次: %d", healthy.calls)
+	}
+}
+
+func TestRecordEmittedOnceOnAllFailure(t *testing.T) {
+	var calls int
+	var fields map[string]any
+	app := &App{
+		recipients: []recipientRuntime{{Name: "r1", Chans: []channel.Channel{
+			&fakeCh{name: "a", err: errors.New("x")},
+			panicCh{},
+		}}},
+		keywordOf: func(string) string { return "" },
+		warn:      func(string) {},
+		info:      func(string) {},
+		record:    func(f map[string]any, _ string) { calls++; fields = f },
+	}
+	if app.HandleSMS(channel.Message{Number: "10086", Text: "t"}) {
+		t.Fatal("全部失败或 panic 应返回 false")
+	}
+	if calls != 1 {
+		t.Fatalf("Record 应恰好调用一次: %d", calls)
+	}
+	if fields["status"] != "failed" {
+		t.Fatalf("全失败状态应为 failed: %v", fields["status"])
+	}
+	fwd, ok := fields["forwarded_to"].([]string)
+	if !ok || len(fwd) != 0 {
+		t.Fatalf("forwarded_to 应为空切片而非 null: %#v", fields["forwarded_to"])
+	}
+}
+
 type captureCh struct{ dst *channel.Message }
 
 func (c captureCh) Name() string                                      { return "cap" }
