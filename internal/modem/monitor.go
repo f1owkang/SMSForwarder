@@ -108,12 +108,12 @@ func (mo *Monitor) subscribe() error {
 }
 
 func (mo *Monitor) Run(ctx context.Context) error {
-	if err := mo.subscribe(); err != nil {
-		return err
-	}
 	sigCh := make(chan *dbus.Signal, 16)
 	mo.conn.Signal(sigCh)
 	defer mo.conn.RemoveSignal(sigCh)
+	if err := mo.subscribe(); err != nil {
+		return err
+	}
 	for {
 		select {
 		case <-ctx.Done():

@@ -2,6 +2,8 @@ VERSION ?= dev
 ARCHES  = amd64 arm64 arm
 LDFLAGS = -s -w -X main.version=$(VERSION)
 
+.DEFAULT_GOAL := test
+
 .PHONY: test vet fmt build-all package clean
 
 fmt:
