@@ -62,7 +62,7 @@ func TestAllChannelsFailed(t *testing.T) {
 
 type panicCh struct{}
 
-func (p panicCh) Name() string { return "panic" }
+func (p panicCh) Name() string                                      { return "panic" }
 func (p panicCh) Send(ctx context.Context, m channel.Message) error { panic("kaboom") }
 
 func TestPanicIsolated(t *testing.T) {
@@ -74,7 +74,7 @@ func TestPanicIsolated(t *testing.T) {
 
 type captureCh struct{ dst *channel.Message }
 
-func (c captureCh) Name() string { return "cap" }
+func (c captureCh) Name() string                                      { return "cap" }
 func (c captureCh) Send(ctx context.Context, m channel.Message) error { *c.dst = m; return nil }
 
 func TestKeywordInjectedIntoMessage(t *testing.T) {
