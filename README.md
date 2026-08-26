@@ -16,7 +16,7 @@ Go 实现的 ModemManager 短信转发器：监听 D-Bus 事件，自动提取�
 ## 使用方法
 
 ```
-curl -sSL https://raw.githubusercontent.com/f1owkang/SMS_forwarder/main/script_install_online.sh | bash
+curl -sSL https://raw.githubusercontent.com/f1owkang/SMSForwarder/main/script_install_online.sh | bash
 ```
 
 安装后：

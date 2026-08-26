@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-REPO="f1owkang/SMS_forwarder"
+REPO="f1owkang/SMSForwarder"
 
 case "$(uname -m)" in
   x86_64)  ARCH=amd64 ;;
