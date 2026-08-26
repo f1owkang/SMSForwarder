@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+
+	"smsforwarder/internal/channel"
 )
 
 func TestDispatchAddedSubmitsJob(t *testing.T) {
@@ -59,6 +61,65 @@ func TestDispatchIgnoresOtherSignals(t *testing.T) {
 		t.Fatalf("无关信号不应投递: %+v", j)
 	default:
 	}
+}
+
+func TestNewMonitorPollBudgetDefault(t *testing.T) {
+	if mo := NewMonitor(nil, nil, nil, false, 0); mo.pollBudget != 5*time.Second {
+		t.Fatalf("pollBudget 缺省应为 5s: %v", mo.pollBudget)
+	}
+	if mo := NewMonitor(nil, nil, nil, false, 10*time.Second); mo.pollBudget != 10*time.Second {
+		t.Fatalf("显式 pollBudget 应采用: %v", mo.pollBudget)
+	}
+}
+
+const (
+	testModemPath = "/org/freedesktop/ModemManager1/Modem/0"
+	testSMSPath   = "/org/freedesktop/ModemManager1/SMS/1"
+)
+
+func TestDeliverForwardsEvenWhenAutoDeleteDisabled(t *testing.T) {
+	calls := 0
+	mo := &Monitor{
+		onSMS: func(channel.Message) bool { calls++; return true },
+		deleteSMS: func(dbus.ObjectPath, dbus.ObjectPath) {
+			t.Fatal("auto_delete=false 时不应删除")
+		},
+	}
+	mo.deliver(channel.Message{}, testModemPath, testSMSPath)
+	if calls != 1 {
+		t.Fatalf("转发回调应恰好调用一次（auto_delete=false 不得短路转发）: %d", calls)
+	}
+}
+
+func TestDeliverDeletesWhenAutoDeleteAndDelivered(t *testing.T) {
+	var deleted []dbus.ObjectPath
+	forwarded := false
+	mo := &Monitor{
+		autoDelete: true,
+		onSMS: func(channel.Message) bool {
+			forwarded = true
+			return true
+		},
+		deleteSMS: func(modemPath, smsPath dbus.ObjectPath) {
+			deleted = append(deleted, modemPath, smsPath)
+		},
+	}
+	mo.deliver(channel.Message{}, testModemPath, testSMSPath)
+	if !forwarded || len(deleted) != 2 ||
+		deleted[0] != testModemPath || deleted[1] != testSMSPath {
+		t.Fatalf("转发成功后应按收信 modem 删除: forwarded=%v deleted=%v", forwarded, deleted)
+	}
+}
+
+func TestDeliverSkipsDeleteWhenNotDelivered(t *testing.T) {
+	mo := &Monitor{
+		autoDelete: true,
+		onSMS:      func(channel.Message) bool { return false },
+		deleteSMS: func(dbus.ObjectPath, dbus.ObjectPath) {
+			t.Fatal("转发未成功不应删除")
+		},
+	}
+	mo.deliver(channel.Message{}, testModemPath, testSMSPath)
 }
 
 func TestModemPathsFromObjects(t *testing.T) {

@@ -3,10 +3,15 @@ package logging
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 )
+
+type failingWriter struct{}
+
+func (failingWriter) Write(p []byte) (int, error) { return 0, errors.New("disk full") }
 
 func newTestLogger() (*Logger, *bytes.Buffer, *bytes.Buffer) {
 	con := &bytes.Buffer{}
@@ -73,5 +78,38 @@ func TestRecordFlatFields(t *testing.T) {
 	}
 	if con.String() != "[INFO] [√] 已转发\n" {
 		t.Fatalf("Record 控制台摘要错误: %q", con.String())
+	}
+}
+
+func TestLogWriteFailureFallsToStderr(t *testing.T) {
+	var errSink bytes.Buffer
+	lg := New(&bytes.Buffer{}, failingWriter{})
+	lg.stderr = &errSink
+	lg.Info("重要消息")
+	out := errSink.String()
+	if !strings.Contains(out, "disk full") || !strings.Contains(out, "重要消息") {
+		t.Fatalf("写文件失败应落 stderr 且带原消息: %q", out)
+	}
+}
+
+func TestRecordWriteFailureFallsToStderr(t *testing.T) {
+	var errSink bytes.Buffer
+	lg := New(&bytes.Buffer{}, failingWriter{})
+	lg.stderr = &errSink
+	lg.Record(map[string]any{"number": "10086"}, "[√] 已转发")
+	out := errSink.String()
+	if !strings.Contains(out, "disk full") || !strings.Contains(out, "已转发") {
+		t.Fatalf("Record 写文件失败应落 stderr: %q", out)
+	}
+}
+
+func TestWriteOKNoStderr(t *testing.T) {
+	var errSink bytes.Buffer
+	lg := New(&bytes.Buffer{}, &bytes.Buffer{})
+	lg.stderr = &errSink
+	lg.Info("正常")
+	lg.Record(map[string]any{"n": "1"}, "[√] 正常")
+	if errSink.Len() != 0 {
+		t.Fatalf("写文件成功不应落 stderr: %q", errSink.String())
 	}
 }

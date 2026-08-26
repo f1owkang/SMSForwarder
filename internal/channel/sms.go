@@ -3,6 +3,7 @@ package channel
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -11,6 +12,7 @@ const (
 	modemDest      = "org.freedesktop.ModemManager1"
 	ifaceMessaging = "org.freedesktop.ModemManager1.Modem.Messaging"
 	ifaceSms       = "org.freedesktop.ModemManager1.Sms"
+	smsTimeout     = 15 * time.Second
 )
 
 type SMS struct {
@@ -32,6 +34,8 @@ func smsCreateProps(number, text string) map[string]dbus.Variant {
 }
 
 func (s *SMS) Send(ctx context.Context, m Message) error {
+	ctx, cancel := context.WithTimeout(ctx, smsTimeout)
+	defer cancel()
 	modemPath := s.modemPath
 	if m.ModemPath != "" {
 		modemPath = dbus.ObjectPath(m.ModemPath)

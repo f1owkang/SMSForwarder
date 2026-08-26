@@ -4,6 +4,8 @@ log_file: /var/log/smsforwarder/sms_log.jsonl
 auto_delete: false
 # 心跳日志间隔（证明服务存活），0 表示关闭
 heartbeat: 24h
+# 等待短信进入已接收状态的最长时间；ModemManager 繁忙时可适当调大
+poll_timeout: 5s
 
 recipients:
   - name: main1

@@ -87,7 +87,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	mon := modem.NewMonitor(conn, app.HandleSMS, lg, cfg.AutoDelete)
+	mon := modem.NewMonitor(conn, app.HandleSMS, lg, cfg.AutoDelete, cfg.PollBudget.Duration)
 	lg.Info("短信监听服务已启动")
 	if err := mon.Run(ctx); err != nil {
 		fatalf("%v", err)

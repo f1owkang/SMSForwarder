@@ -12,7 +12,7 @@ case "$(uname -m)" in
 esac
 
 URL_BASE="https://github.com/${REPO}/releases/download"
-TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+TAG=$(curl -fsSL -o /dev/null -w '%{url_effective}' -L "https://github.com/${REPO}/releases/latest" | sed 's#.*/##')
 if [ -z "$TAG" ]; then
   echo "无法获取最新版本号，请检查网络后重试"
   exit 1
@@ -24,7 +24,9 @@ echo "正在下载 ${ARCH} 版本（${TAG}）..."
 curl -fsSL "${URL_BASE}/${TAG}/smsforwarder-${TAG}-linux-${ARCH}.tar.gz" | tar xz -C "$TMP"
 
 sudo install -m 755 "$TMP/smsforwarder" /usr/local/bin/smsforwarder
+sudo id -u smsforwarder >/dev/null 2>&1 || sudo useradd --system --no-create-home --shell /usr/sbin/nologin smsforwarder
 sudo mkdir -p /etc/smsforwarder /var/log/smsforwarder
+sudo chown -R smsforwarder:smsforwarder /var/log/smsforwarder
 sudo cp "$TMP/stopwords.txt" "$TMP/userwords.txt" /etc/smsforwarder/
 if [ ! -f /etc/smsforwarder/config.yml ]; then
   sudo cp "$TMP/config.example.yml" /etc/smsforwarder/config.yml

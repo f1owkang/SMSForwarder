@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -27,7 +28,19 @@ func NewHTTPClient() *HTTPClient {
 }
 
 func retryable(code int) bool {
-	return code == 500 || code == 502 || code == 504
+	return code == 500 || code == 502 || code == 503 || code == 504 || code == 429
+}
+
+// retryDelay 计算下一次重试前的等待：优先遵循上游 Retry-After（秒数），
+// 否则按指数退避 1s、2s。
+func retryDelay(resp *http.Response, attempt int) time.Duration {
+	wait := backoff << attempt
+	if after := resp.Header.Get("Retry-After"); after != "" {
+		if secs, err := strconv.Atoi(after); err == nil && secs >= 0 {
+			wait = time.Duration(secs) * time.Second
+		}
+	}
+	return wait
 }
 
 type bodyWithCancel struct {
@@ -44,21 +57,25 @@ func (b *bodyWithCancel) Close() error {
 func (h *HTTPClient) do(ctx context.Context, req *http.Request) (*http.Response, error) {
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if attempt > 0 {
-			h.sleep(backoff << (attempt - 1))
-		}
 		rctx, cancel := context.WithTimeout(ctx, reqTimeout)
 		resp, err := h.Base.Do(req.WithContext(rctx))
 		if err != nil {
 			cancel()
 			lastErr = err
+			if attempt < maxRetries {
+				h.sleep(backoff << attempt)
+			}
 			continue
 		}
 		if retryable(resp.StatusCode) {
+			wait := retryDelay(resp, attempt)
 			io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 			cancel()
 			lastErr = fmt.Errorf("上游返回可重试状态码 %d", resp.StatusCode)
+			if attempt < maxRetries {
+				h.sleep(wait)
+			}
 			continue
 		}
 		resp.Body = &bodyWithCancel{ReadCloser: resp.Body, cancel: cancel}

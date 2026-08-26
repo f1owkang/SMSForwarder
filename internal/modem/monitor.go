@@ -15,15 +15,16 @@ import (
 )
 
 const (
-	dest           = "org.freedesktop.ModemManager1"
-	rootPath       = "/org/freedesktop/ModemManager1"
-	ifaceMessaging = "org.freedesktop.ModemManager1.Modem.Messaging"
-	ifaceSmsProps  = "org.freedesktop.ModemManager1.Sms"
-	stateReceived  = 3
-	pollBudget     = 5 * time.Second
-	pollTick       = 1 * time.Second
-	workerCount    = 4
-	jobQueue       = 64
+	dest              = "org.freedesktop.ModemManager1"
+	rootPath          = "/org/freedesktop/ModemManager1"
+	ifaceMessaging    = "org.freedesktop.ModemManager1.Modem.Messaging"
+	ifaceSmsProps     = "org.freedesktop.ModemManager1.Sms"
+	stateReceived     = 3
+	defaultPollBudget = 5 * time.Second
+	pollTick          = 1 * time.Second
+	workerCount       = 4
+	jobQueue          = 64
+	deleteTimeout     = 15 * time.Second
 )
 
 type smsJob struct {
@@ -36,11 +37,18 @@ type Monitor struct {
 	onSMS      func(channel.Message) bool
 	log        *logging.Logger
 	autoDelete bool
+	pollBudget time.Duration
 	jobs       chan smsJob
+	deleteSMS  func(modemPath, smsPath dbus.ObjectPath)
 }
 
-func NewMonitor(conn *dbus.Conn, onSMS func(channel.Message) bool, lg *logging.Logger, autoDelete bool) *Monitor {
-	return &Monitor{conn: conn, onSMS: onSMS, log: lg, autoDelete: autoDelete}
+func NewMonitor(conn *dbus.Conn, onSMS func(channel.Message) bool, lg *logging.Logger, autoDelete bool, pollBudget time.Duration) *Monitor {
+	if pollBudget <= 0 {
+		pollBudget = defaultPollBudget
+	}
+	mo := &Monitor{conn: conn, onSMS: onSMS, log: lg, autoDelete: autoDelete, pollBudget: pollBudget}
+	mo.deleteSMS = mo.delete
+	return mo
 }
 
 func modemPathsFromObjects(objs map[dbus.ObjectPath]map[string]map[string]dbus.Variant) []dbus.ObjectPath {
@@ -162,7 +170,11 @@ func (mo *Monitor) dispatch(sig *dbus.Signal) {
 		if !ok || !ok2 || !received {
 			return
 		}
-		mo.jobs <- smsJob{modemPath: sig.Path, smsPath: path}
+		select {
+		case mo.jobs <- smsJob{modemPath: sig.Path, smsPath: path}:
+		default:
+			mo.log.Warn("短信处理队列已满，丢弃一条待处理短信")
+		}
 	case sig.Name == "org.freedesktop.DBus.NameOwnerChanged":
 		mo.log.Warn("ModemManager 发生变更，重新枚举调制解调器")
 		if _, err := FirstModemPath(mo.conn); err != nil {
@@ -189,7 +201,7 @@ func (mo *Monitor) handleIncoming(modemPath, path dbus.ObjectPath) {
 		}
 		return v, nil
 	}
-	received, err := awaitReceived(get, pollBudget, pollTick, time.Sleep)
+	received, err := awaitReceived(get, mo.pollBudget, pollTick, time.Sleep)
 	if err != nil {
 		mo.log.Error(fmt.Sprintf("读取短信状态失败: %v", err))
 		return
@@ -215,8 +227,15 @@ func (mo *Monitor) handleIncoming(modemPath, path dbus.ObjectPath) {
 		Timestamp: parseMMTime(time.Now(), variantString(props, "Timestamp", "")),
 		ModemPath: string(modemPath),
 	}
-	if mo.autoDelete && mo.onSMS(msg) {
-		mo.delete(modemPath, path)
+	mo.deliver(msg, modemPath, path)
+}
+
+// deliver 先执行转发回调（无论 auto_delete 如何都必须转发），
+// 再按配置决定是否删除。转发与删除解耦，防止删除开关短路转发。
+func (mo *Monitor) deliver(msg channel.Message, modemPath, smsPath dbus.ObjectPath) {
+	delivered := mo.onSMS(msg)
+	if mo.autoDelete && delivered {
+		mo.deleteSMS(modemPath, smsPath)
 	}
 }
 
@@ -228,7 +247,9 @@ func variantString(props map[string]dbus.Variant, key, def string) string {
 }
 
 func (mo *Monitor) delete(modemPath, smsPath dbus.ObjectPath) {
-	err := mo.conn.Object(dest, modemPath).CallWithContext(context.Background(),
+	ctx, cancel := context.WithTimeout(context.Background(), deleteTimeout)
+	defer cancel()
+	err := mo.conn.Object(dest, modemPath).CallWithContext(ctx,
 		ifaceMessaging+".Delete", 0, smsPath).Err
 	if err != nil {
 		mo.log.Error(fmt.Sprintf("删除短信失败: %s - %v", smsPath, err))

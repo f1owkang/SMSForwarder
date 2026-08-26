@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"time"
 )
@@ -12,11 +13,12 @@ type Logger struct {
 	mu      sync.Mutex
 	console io.Writer
 	file    io.Writer
+	stderr  io.Writer
 	now     func() time.Time
 }
 
 func New(console, file io.Writer) *Logger {
-	return &Logger{console: console, file: file, now: time.Now}
+	return &Logger{console: console, file: file, now: time.Now, stderr: os.Stderr}
 }
 
 func (l *Logger) log(level, msg string) {
@@ -27,7 +29,9 @@ func (l *Logger) log(level, msg string) {
 		if b, err := json.Marshal(map[string]string{
 			"type": "log", "timestamp": ts, "level": level, "message": msg,
 		}); err == nil {
-			fmt.Fprintf(l.file, "%s\n", b)
+			if _, werr := fmt.Fprintf(l.file, "%s\n", b); werr != nil {
+				fmt.Fprintf(l.stderr, "[日志写入失败] %v: %s\n", werr, msg)
+			}
 		}
 	}
 	fmt.Fprintf(l.console, "[%s] %s\n", level, msg)
@@ -46,7 +50,9 @@ func (l *Logger) Record(fields map[string]any, summary string) {
 			rec[k] = v
 		}
 		if b, err := json.Marshal(rec); err == nil {
-			fmt.Fprintf(l.file, "%s\n", b)
+			if _, werr := fmt.Fprintf(l.file, "%s\n", b); werr != nil {
+				fmt.Fprintf(l.stderr, "[日志写入失败] %v: %s\n", werr, summary)
+			}
 		}
 	}
 	fmt.Fprintf(l.console, "[INFO] %s\n", summary)

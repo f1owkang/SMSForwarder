@@ -12,6 +12,7 @@ const validYAML = `
 log_file: /var/log/s.jsonl
 auto_delete: true
 heartbeat: 6h
+poll_timeout: 8s
 recipients:
   - name: main1
     channels:
@@ -52,6 +53,9 @@ func TestLoadValid(t *testing.T) {
 	if cfg.Heartbeat.Duration != 6*time.Hour {
 		t.Fatalf("heartbeat 解析错误: %v", cfg.Heartbeat.Duration)
 	}
+	if cfg.PollBudget.Duration != 8*time.Second {
+		t.Fatalf("poll_timeout 解析错误: %v", cfg.PollBudget.Duration)
+	}
 	if len(cfg.Recipients) != 2 || len(cfg.Recipients[1].Channels) != 4 {
 		t.Fatalf("recipients 解析错误: %+v", cfg.Recipients)
 	}
@@ -73,6 +77,25 @@ func TestHeartbeatDefault24hAndZeroOff(t *testing.T) {
 	}
 	if cfg.Heartbeat.Duration != 0 {
 		t.Fatalf("heartbeat: 0 应表示关闭: %v", cfg.Heartbeat.Duration)
+	}
+}
+
+func TestPollTimeoutDefault5s(t *testing.T) {
+	noPoll := strings.Replace(validYAML, "poll_timeout: 8s\n", "", 1)
+	cfg, err := Load(writeTemp(t, noPoll))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PollBudget == nil || cfg.PollBudget.Duration != 5*time.Second {
+		t.Fatalf("缺省 poll_timeout 应为 5s: %+v", cfg.PollBudget)
+	}
+}
+
+func TestPollTimeoutZeroRejected(t *testing.T) {
+	zero := strings.Replace(validYAML, "poll_timeout: 8s", "poll_timeout: 0", 1)
+	_, err := Load(writeTemp(t, zero))
+	if err == nil || !strings.Contains(err.Error(), "poll_timeout") {
+		t.Fatalf("poll_timeout: 0 应报错: %v", err)
 	}
 }
 

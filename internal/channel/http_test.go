@@ -109,6 +109,73 @@ func TestNetworkErrorRetriesThenFails(t *testing.T) {
 	}
 }
 
+func TestRetryable503And429(t *testing.T) {
+	for _, code := range []int{503, 429} {
+		var hits atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if hits.Add(1) <= 2 {
+				w.WriteHeader(code)
+				return
+			}
+			io.WriteString(w, `{}`)
+		}))
+		h, sleeps := newTestClient()
+		resp, err := h.PostJSONResp(context.Background(), srv.URL, nil, nil)
+		srv.Close()
+		if err != nil {
+			t.Fatalf("状态码 %d 第三次应成功: %v", code, err)
+		}
+		resp.Body.Close()
+		if hits.Load() != 3 || len(*sleeps) != 2 {
+			t.Fatalf("状态码 %d 应重试 3 次: hits=%d sleeps=%v", code, hits.Load(), *sleeps)
+		}
+	}
+}
+
+func TestRetryAfterOverridesBackoff(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) <= 2 {
+			w.Header().Set("Retry-After", "3")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		io.WriteString(w, `{}`)
+	}))
+	defer srv.Close()
+	h, sleeps := newTestClient()
+	resp, err := h.PostJSONResp(context.Background(), srv.URL, nil, nil)
+	if err != nil {
+		t.Fatalf("第三次应成功: %v", err)
+	}
+	resp.Body.Close()
+	if len(*sleeps) != 2 || (*sleeps)[0] != 3*time.Second || (*sleeps)[1] != 3*time.Second {
+		t.Fatalf("应遵循 Retry-After=3s: %v", *sleeps)
+	}
+}
+
+func TestRetryAfterInvalidFallsBack(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) <= 2 {
+			w.Header().Set("Retry-After", "abc")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		io.WriteString(w, `{}`)
+	}))
+	defer srv.Close()
+	h, sleeps := newTestClient()
+	resp, err := h.PostJSONResp(context.Background(), srv.URL, nil, nil)
+	if err != nil {
+		t.Fatalf("第三次应成功: %v", err)
+	}
+	resp.Body.Close()
+	if len(*sleeps) != 2 || (*sleeps)[0] != time.Second || (*sleeps)[1] != 2*time.Second {
+		t.Fatalf("Retry-After 非法应回退指数退避: %v", *sleeps)
+	}
+}
+
 func TestRetryReplaysBodyIdentically(t *testing.T) {
 	var hits atomic.Int32
 	var mu sync.Mutex

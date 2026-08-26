@@ -11,7 +11,9 @@ if [ -z "$BIN" ]; then
 fi
 
 sudo install -m 755 "$BIN" /usr/local/bin/smsforwarder
+sudo id -u smsforwarder >/dev/null 2>&1 || sudo useradd --system --no-create-home --shell /usr/sbin/nologin smsforwarder
 sudo mkdir -p /etc/smsforwarder /var/log/smsforwarder
+sudo chown -R smsforwarder:smsforwarder /var/log/smsforwarder
 sudo cp stopwords.txt userwords.txt /etc/smsforwarder/
 [ -f /etc/smsforwarder/config.yml ] || sudo cp config.example.yml /etc/smsforwarder/config.yml
 sudo cp smsforwarder.service /etc/systemd/system/

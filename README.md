@@ -51,6 +51,8 @@ ModemManager ──D-Bus Added信号──> 监听器 ──> 提取验证码/�
 | `/etc/smsforwarder/` | config.yml 与词库 |
 | `/var/log/smsforwarder/` | 结构化日志 |
 
+服务以专用低权用户 `smsforwarder` 运行（安装脚本自动创建），不占用 root。
+
 装好之后三步：
 
 ```bash
@@ -79,6 +81,7 @@ sudo /usr/local/bin/smsforwarder -test
 log_file: /var/log/smsforwarder/sms_log.jsonl   # 留空则只写 stdout/journal
 auto_delete: false                               # 转发成功后删除设备上的短信
 heartbeat: 24h                                   # 心跳日志间隔，0 表示关闭
+poll_timeout: 5s                                 # 等待短信进入已接收状态的最长时间
 
 recipients:
   - name: main1
@@ -105,7 +108,7 @@ recipients:
 
 </details>
 
-配置文件按以下顺序查找：`-c` 指定的路径 → `/etc/smsforwarder/config.yml` → 二进制同目录 `./config.yml`。启动时全量校验，缺字段会在报错里直接指出是哪个接收者的哪个渠道。
+配置文件按以下顺序查找：`-c` 指定的路径 → `/etc/smsforwarder/config.yml` → 二进制同目录 `./config.yml`。启动时全量校验，缺字段会在报错里直接指出是哪个接收者的哪个渠道。`poll_timeout` 是等待短信进入已接收状态的最长时间（默认 5s），ModemManager 处理缓慢时按需调大。
 
 ## 推送渠道
 

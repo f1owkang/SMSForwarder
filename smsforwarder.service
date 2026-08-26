@@ -5,6 +5,8 @@ Wants=ModemManager.service
 
 [Service]
 Type=simple
+User=smsforwarder
+Group=smsforwarder
 Restart=on-failure
 RestartSec=3
 ExecStart=/usr/local/bin/smsforwarder -c /etc/smsforwarder/config.yml

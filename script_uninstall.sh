@@ -10,7 +10,8 @@ sudo rm -f /usr/local/bin/smsforwarder
 read -p "是否同时删除配置与日志（/etc/smsforwarder /var/log/smsforwarder）？(y/n): " choice
 if [ "$choice" = "y" ]; then
   sudo rm -rf /etc/smsforwarder /var/log/smsforwarder
-  echo "配置与日志已删除！"
+  sudo userdel smsforwarder 2>/dev/null || true
+  echo "配置与日志已删除，smsforwarder 用户已移除！"
 else
   echo "已保留 /etc/smsforwarder 与 /var/log/smsforwarder。"
 fi

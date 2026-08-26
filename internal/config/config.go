@@ -55,6 +55,7 @@ type Config struct {
 	LogFile    string      `yaml:"log_file"`
 	AutoDelete bool        `yaml:"auto_delete"`
 	Heartbeat  *Duration   `yaml:"heartbeat"`
+	PollBudget *Duration   `yaml:"poll_timeout"`
 	Recipients []Recipient `yaml:"recipients"`
 
 	path string
@@ -73,6 +74,9 @@ func Load(path string) (*Config, error) {
 	if c.Heartbeat == nil {
 		c.Heartbeat = &Duration{Duration: 24 * time.Hour}
 	}
+	if c.PollBudget == nil {
+		c.PollBudget = &Duration{Duration: 5 * time.Second}
+	}
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
@@ -84,6 +88,9 @@ func (c *Config) Dir() string { return filepath.Dir(c.path) }
 func (c *Config) Validate() error {
 	if len(c.Recipients) == 0 {
 		return errors.New("recipients 不能为空，至少配置一个接收者")
+	}
+	if c.PollBudget == nil || c.PollBudget.Duration <= 0 {
+		return errors.New("poll_timeout 必须大于 0")
 	}
 	seen := map[string]bool{}
 	for i, r := range c.Recipients {
